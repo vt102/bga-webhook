@@ -56,6 +56,24 @@ def bga_whose_turn(bga_url):
 
     return matchObj.group(1)
 
+def find_discord_id(player):
+    '''Return the Discord ID corresponding to the BGA player name.
+
+    Args:
+        player: The BGA player name referenced in config.players[]['bga']
+
+    Returns:
+        String of the Discord ID referenced in config.players[]['discord']
+
+    Raises:
+        RuntimeError: if player can not be found in config data structure
+    '''
+
+    for p in config.players:
+        if p['bga'] == player:
+            return p['discord']
+    raise RuntimeError
+
 
 def run_game(bga_url, discord_url, name):
     '''The primary entrypoint to handle a single game.
@@ -81,7 +99,8 @@ def run_game(bga_url, discord_url, name):
     if player != last_player:
         config.state[bga_url]['player'] = player
         config.state[bga_url]['timestamp'] = datetime.now()
-        message = f"<@{players_c2d[player]}> it's your turn in {name} "
+        discord_id = find_discord_id(player)
+        message = f"<@{discord_id}> it's your turn in {name} "
         if not config.debug:
             send_message(message,
                          discord_url)
