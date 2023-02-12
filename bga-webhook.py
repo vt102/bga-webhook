@@ -29,6 +29,31 @@ def send_message(message, server):
     print(r)
     print(r.text)
 
+def game_has_ended(bga_url):
+    '''Check to see if the game has ended.
+
+    Args:
+        bga_url: The URL of the Board Game Area game.
+
+    Returns:
+        True: if the BGA game has endend
+        False: if the BGA game has not ended
+    '''
+
+    # TODO: render BGA page only once
+    # TODO: this seems especially fragile; h2 id has typo...
+
+    session = HTMLSession()
+    r = session.get(bga_url)
+    r.html.render()
+    # <h2 id="status_detailled">Game has ended</h2>
+    f = r.html.find('h2#status_detailled')
+    if not f:
+        return False
+    if f[0].element.text_content() == 'Game has ended':
+        return True
+    return False
+
 def bga_whose_turn(bga_url):
     '''Find out whose turn it is on a given BGA game.
 
@@ -52,15 +77,29 @@ def bga_whose_turn(bga_url):
                          f[0].html[0:100],
                          re.M|re.I)
 
-    assert matchObj
+    if matchObj:
+        return matchObj.group(1)
 
-    return matchObj.group(1)
+    # BGA not obviously telling us whose turn it is; e.g., Stone Age
+    # "Some players must feed their people".  Theorizing that this
+    # could be waiting for multiple people; try to identify by the
+    # hourglass icon in player area
 
-def find_discord_id(player):
+    for p in r.html.find('div.emblemwrap[style*="display: block"]'):
+        # <Element 'div' class=('emblemwrap',) id='avatar_active_wrap_85701815' style='display: block;'>
+        # print(p)
+        div_id = p.attrs['id']
+        bgaid = div_id.split('_')[-1]
+        # print(bgaid)
+        return(find_bga_name(bgaid))
+
+
+def find_discord_id(bga=None, bgaid=None):
     '''Return the Discord ID corresponding to the BGA player name.
 
     Args:
-        player: The BGA player name referenced in config.players[]['bga']
+        bga: The BGA player name referenced in config.players[]['bga']
+        bgaid: The BGA player id referenced in config.players[]['bgaid']
 
     Returns:
         String of the Discord ID referenced in config.players[]['discord']
@@ -69,11 +108,38 @@ def find_discord_id(player):
         RuntimeError: if player can not be found in config data structure
     '''
 
+    if bga:
+        selected_index = 'bga'
+        value = bga
+    elif bgaid:
+        selected_index = 'bgaid'
+        value = bgaid
+    else:
+        raise RuntimeError
+
     for p in config.players:
-        if p['bga'] == player:
+        if p['bga'] == value:
             return p['discord']
     raise RuntimeError
 
+def find_bga_name(bgaid):
+    '''Return the BGA player name corresponding to the BGA player ID.
+
+    Args:
+        bgaid: The BGA player id referenced in config.players[]['bgaid']
+
+    Returns:
+        String of the BGA player name referenced in
+        config.players[]['bga']
+
+    Raises:
+        RuntimeError: if player can not be found in config data structure
+    '''
+
+    for p in config.players:
+        if p['bgaid'] == bgaid:
+            return p['bga']
+    raise RuntimeError
 
 def run_game(bga_url, discord_url, name):
     '''The primary entrypoint to handle a single game.
@@ -89,6 +155,9 @@ def run_game(bga_url, discord_url, name):
         Always returns True; any errors will likely trigger an Exception
     '''
 
+    if game_has_ended(bga_url):
+        return True
+
     player = bga_whose_turn(bga_url)
 
     print(bga_url)
@@ -99,8 +168,8 @@ def run_game(bga_url, discord_url, name):
     if player != last_player:
         config.state[bga_url]['player'] = player
         config.state[bga_url]['timestamp'] = datetime.now()
-        discord_id = find_discord_id(player)
-        message = f"<@{discord_id}> it's your turn in {name} "
+        discord_id = find_discord_id(bga=player)
+        message = f"<@{discord_id}> it's your turn in {name} {bga_url}"
         if not config.debug:
             send_message(message,
                          discord_url)
