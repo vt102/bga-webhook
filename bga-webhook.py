@@ -168,8 +168,14 @@ def run_game(bga_url, discord_url, name):
     if player != last_player:
         config.state[bga_url]['player'] = player
         config.state[bga_url]['timestamp'] = datetime.now()
-        discord_id = find_discord_id(bga=player)
-        message = f"<@{discord_id}> it's your turn in {name} {bga_url}"
+        try:
+            discord_id = find_discord_id(bga=player)
+            message = f"<@{discord_id}> it's your turn in {name} {bga_url}"
+        except RuntimeError as exc:
+            message = f"Waiting for {player}..."
+        except Exception as exc:
+            raise exc
+
         if not config.debug:
             send_message(message,
                          discord_url)
